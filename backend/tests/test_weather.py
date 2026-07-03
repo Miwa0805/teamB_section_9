@@ -375,7 +375,13 @@ async def test_fetch_weather_forecast_cached_miss_fetches_and_stores(
 async def test_fetch_weather_forecast_raises_when_daily_time_empty(monkeypatch) -> None:
     """daily['time'] が空配列でも IndexError を漏らさず正規化する（回帰）。"""
 
+    class _FakeRequest:
+        url = "https://api.open-meteo.com/v1/forecast"
+
     class _FakeResponse:
+        status_code = 200
+        request = _FakeRequest()
+
         def raise_for_status(self) -> None:
             return None
 

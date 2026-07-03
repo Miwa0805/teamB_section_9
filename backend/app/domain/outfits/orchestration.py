@@ -97,6 +97,14 @@ async def build_outfit_suggestion_plan(
 
     latitude, longitude = region["lat"], region["lng"]
 
+    logger.info(
+        "Start weather fetch (user=%s, region=%s, lat=%s, lng=%s)",
+        user_id,
+        resolved_region_code,
+        latitude,
+        longitude,
+    )
+
     try:
         weather = await fetch_weather_forecast_cached(
             region_code=resolved_region_code,
@@ -104,13 +112,21 @@ async def build_outfit_suggestion_plan(
             longitude=longitude,
             days=3,
         )
-        prompt_weather = extract_outfit_prompt_weather(weather)
-    except (httpx.HTTPError, WeatherForecastResponseError) as exc:
-        logger.error(
-            "weather fetch failed for outfit suggestion (user=%s, region=%s): %s",
+
+        logger.info(
+            "Weather fetch succeeded (user=%s, region=%s, cached=%s)",
             user_id,
             resolved_region_code,
-            exc,
+            weather.get("cached"),
+        )
+
+        prompt_weather = extract_outfit_prompt_weather(weather)
+
+    except (httpx.HTTPError, WeatherForecastResponseError) as exc:
+        logger.exception(
+            "Weather fetch failed (user=%s, region=%s)",
+            user_id,
+            resolved_region_code,
         )
         raise OutfitWeatherError("failed to fetch weather forecast") from exc
 

@@ -15,8 +15,8 @@ COPY . .
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-EXPOSE 8000
+EXPOSE 8080
 
 # 本番向け起動。--reload（開発モード）は使わない。
 # worker 数はインスタンスの CPU に応じて調整する（目安: 2×コア数）。
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
