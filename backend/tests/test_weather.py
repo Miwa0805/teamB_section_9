@@ -376,6 +376,8 @@ async def test_fetch_weather_forecast_raises_when_daily_time_empty(monkeypatch) 
     """daily['time'] が空配列でも IndexError を漏らさず正規化する（回帰）。"""
 
     class _FakeResponse:
+        status_code = 200
+
         def raise_for_status(self) -> None:
             return None
 
