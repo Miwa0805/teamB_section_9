@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypedDict
 
@@ -5,6 +6,8 @@ import httpx
 
 from app.core.config import settings
 from app.core.redis import cache_get_json, cache_set_json
+
+logger = logging.getLogger(__name__)
 
 # 天気キャッシュキーの日付は JST 基準（日付境界をアプリのタイムゾーンに合わせる）。
 _JST = timezone(timedelta(hours=9))
@@ -134,14 +137,41 @@ async def fetch_weather_forecast(
         "timezone": "auto",
     }
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(OPEN_METEO_FORECAST_URL, params=params)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(OPEN_METEO_FORECAST_URL, params=params)
+
         response.raise_for_status()
+
+    except httpx.HTTPStatusError:
+        logger.exception(
+            "Open-Meteo returned HTTP error. status=%s body=%s params=%s",
+            response.status_code,
+            response.text,
+            params,
+        )
+        raise
+
+    except httpx.RequestError:
+        logger.exception(
+            "Open-Meteo request failed. params=%s",
+            params,
+        )
+        raise
 
     try:
         payload = response.json()
+
+        logger.info(
+            "Open-Meteo request succeeded. status=%s url=%s",
+            response.status_code,
+            response.request.url,
+        )
+        logger.debug("Open-Meteo response body: %s", payload)
+
         current = payload["current"]
         daily = payload["daily"]
+
         # 当日の朝/昼/夜の降水確率（hourly は任意。欠落しても提案は継続できる）。
         today_date = daily["time"][0]
         by_part = _precipitation_by_part(payload.get("hourly") or {}, today_date)
@@ -178,10 +208,14 @@ async def fetch_weather_forecast(
             ],
             "cached": False,
         }
-    except (IndexError, KeyError, TypeError, ValueError) as exc:
+    except (IndexError, KeyError, TypeError, ValueError):
         # daily["time"] が空（IndexError）/想定外型（TypeError）でも欠損レスポンス扱いで
         # 正規化する（上の解析関数と捕捉範囲を揃える）。
-        raise WeatherForecastResponseError("invalid weather forecast response") from exc
+        logger.exception(
+            "Invalid Open-Meteo response. payload=%s",
+            payload,
+        )
+        raise WeatherForecastResponseError("invalid weather forecast response")
 
 
 async def fetch_weather_forecast_cached(
@@ -199,15 +233,54 @@ async def fetch_weather_forecast_cached(
     yyyymmdd = datetime.now(_JST).strftime("%Y%m%d")
     key = f"weather:{region_code}:{yyyymmdd}:{days}"
 
+    logger.info(
+        "Checking weather cache. key=%s region=%s",
+        key,
+        region_code,
+    )
+
     cached = await cache_get_json(key)
     if cached is not None:
+        logger.info(
+            "Weather cache hit. key=%s region=%s",
+            key,
+            region_code,
+        )
         cached["cached"] = True
         return cached
+
+    logger.info(
+        "Weather cache miss. key=%s region=%s",
+        key,
+        region_code,
+    )
+
+    logger.info(
+        "Fetching weather from Open-Meteo. region=%s lat=%s lng=%s days=%d",
+        region_code,
+        latitude,
+        longitude,
+        days,
+    )
 
     payload = await fetch_weather_forecast(
         latitude=latitude,
         longitude=longitude,
         days=days,
     )
+
+    logger.info(
+        "Open-Meteo fetch succeeded. region=%s cached=%s",
+        region_code,
+        payload.get("cached", False),
+    )
+
     await cache_set_json(key, payload, settings.REDIS_WEATHER_TTL_SECONDS)
+
+    logger.info(
+        "Weather cache saved. key=%s ttl=%d",
+        key,
+        settings.REDIS_WEATHER_TTL_SECONDS,
+    )
+
     return payload
