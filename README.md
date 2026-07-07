@@ -1,3 +1,13 @@
+# デプロイURL
+https://climo-frontend-8pn9.onrender.com/
+
+## 採用サービス/採用理由
+- フロントエンド：Render / マージ後に変更内容がリアルタイムで反映される
+- バックエンド：Google Cloud / MsEリポジトリ権限の制限がなく、すぐ実装できるため
+- Redis：upstash / 要件定義に記載あり、すぐ実装できるため
+- 定時実行：GitHub Actions / すぐ実装できるため
+
+
 # teamB_section_9
 
 最終課題(TeamB)
